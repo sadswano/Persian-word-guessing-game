@@ -1,11 +1,13 @@
+
 import React from 'react';
 import { Guess } from '../types';
 
 interface GuessListProps {
   guesses: Guess[];
+  loading?: boolean;
 }
 
-export const GuessList: React.FC<GuessListProps> = ({ guesses }) => {
+export const GuessList: React.FC<GuessListProps> = ({ guesses, loading }) => {
   // Sort guesses: closest rank (lowest number) first
   const sortedGuesses = [...guesses].sort((a, b) => a.rank - b.rank);
 
@@ -57,6 +59,22 @@ export const GuessList: React.FC<GuessListProps> = ({ guesses }) => {
 
   return (
     <div className="w-full max-w-md mx-auto px-4 mt-4 pb-32 space-y-2.5">
+      
+      {/* Waiting Float / Skeleton Loader */}
+      {loading && (
+        <div className="relative overflow-hidden flex items-center justify-between p-3.5 rounded-xl border border-[#00979E]/10 bg-white/60 shadow-sm animate-pulse backdrop-blur-sm">
+           <div className="flex items-center gap-3 w-full">
+              <div className="h-5 bg-[#00979E]/10 rounded-md w-1/3"></div>
+           </div>
+           <div className="flex flex-col items-end gap-1">
+              <div className="h-6 bg-[#00979E]/10 rounded-md w-8"></div>
+              <div className="h-2 bg-[#00979E]/5 rounded-md w-6"></div>
+           </div>
+           {/* Shimmer overlay */}
+           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]"></div>
+        </div>
+      )}
+
       {sortedGuesses.map((guess, index) => {
         const percent = getLogarithmicPercent(guess.rank);
         const textColor = getTextColor(guess.rank);
@@ -101,7 +119,7 @@ export const GuessList: React.FC<GuessListProps> = ({ guesses }) => {
         );
       })}
       
-      {guesses.length === 0 && (
+      {guesses.length === 0 && !loading && (
         <div className="text-center mt-12 opacity-40">
            <p className="text-[#00979E] font-bold text-sm">منتظر چی هستی؟ حدس بزن!</p>
         </div>

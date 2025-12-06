@@ -6,6 +6,7 @@ import { GuessList } from './components/GuessList';
 import { Modal } from './components/Modal';
 import { StatsView } from './components/StatsView';
 import { LoginModal } from './components/LoginModal';
+import { Footer } from './components/Footer';
 import { GameState, Guess, PlayerStats, User } from './types';
 import { getRandomWord } from './constants';
 import { calculateRank, generateHint } from './services/geminiService';
@@ -337,7 +338,9 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <GuessList guesses={state.guesses} />
+      <GuessList guesses={state.guesses} loading={loading} />
+
+      <Footer />
 
       {/* Rules Modal */}
       <Modal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} title="آموزش بازی">
