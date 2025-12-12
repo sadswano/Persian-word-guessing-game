@@ -10,11 +10,9 @@ export interface GameState {
   guesses: Guess[];
   lastPlayedDate: string; // YYYY-MM-DD
   isWon: boolean;
-  hasGivenUp: boolean;
-  hintUsed: boolean;
-  hintWord: string | null;
+  isLost: boolean; // New state for running out of guesses
   targetWord: string; // The active secret word
-  mode: 'daily' | 'unlimited';
+  walletCredited: boolean; // To prevent double counting
 }
 
 export interface PlayerStats {
@@ -22,13 +20,15 @@ export interface PlayerStats {
   gamesWon: number;
   currentStreak: number;
   maxStreak: number;
-  totalGuesses: number; // Sum of guesses in won games to calculate average
+  totalGuesses: number;
+  totalEarnings: number; // In Tomans
 }
 
 export interface User {
   name: string;
   email: string;
   isLoggedIn: boolean;
+  walletBalance: number;
 }
 
 export interface WordSimilarityResponse {

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { GuessInput } from './components/GuessInput';
 import { GuessList } from './components/GuessList';
@@ -7,33 +7,31 @@ import { Modal } from './components/Modal';
 import { StatsView } from './components/StatsView';
 import { LoginModal } from './components/LoginModal';
 import { Footer } from './components/Footer';
+import { CalligraphyBackground } from './components/CalligraphyBackground';
 import { GameState, Guess, PlayerStats, User } from './types';
-import { getRandomWord } from './constants';
+import { getDailyWord, PRIZE_LIMIT, REWARD_AMOUNT } from './constants';
 import { calculateRank, generateHint } from './services/geminiService';
 
-const STORAGE_KEY = 'to-me-tony-state-v5';
-const STATS_KEY = 'to-me-tony-stats-v1';
-const USER_KEY = 'to-me-tony-user-v1';
+const STORAGE_KEY = 'to-me-tony-modern-state-v1';
+const STATS_KEY = 'to-me-tony-modern-stats-v1';
+const USER_KEY = 'to-me-tony-modern-user-v1';
 
 const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [hintLoading, setHintLoading] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showEndModal, setShowEndModal] = useState(false);
-  const [showGiveUpConfirm, setShowGiveUpConfirm] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [inputError, setInputError] = useState(false);
   
-  // Default Initial State - Random word (Unlimited Mode)
+  // Game State
   const getInitialState = (): GameState => ({
     guesses: [],
     lastPlayedDate: new Date().toISOString().split('T')[0],
     isWon: false,
-    hasGivenUp: false,
-    hintUsed: false,
-    hintWord: null,
-    targetWord: getRandomWord(),
-    mode: 'unlimited'
+    isLost: false,
+    targetWord: getDailyWord(false), // Default to Easy (Guest) initially
+    walletCredited: false
   });
 
   const getInitialStats = (): PlayerStats => ({
@@ -42,97 +40,136 @@ const App: React.FC = () => {
     currentStreak: 0,
     maxStreak: 0,
     totalGuesses: 0,
+    totalEarnings: 0
   });
 
   const [state, setState] = useState<GameState>(getInitialState);
   const [stats, setStats] = useState<PlayerStats>(getInitialStats);
   const [user, setUser] = useState<User | null>(null);
 
-  // Load state and stats from local storage on mount
+  // Initialize Data
   useEffect(() => {
-    // Load Game State
-    const savedState = localStorage.getItem(STORAGE_KEY);
-    if (savedState) {
-      try {
-        const parsed: GameState = JSON.parse(savedState);
-        setState(parsed);
-        if (parsed.isWon || parsed.hasGivenUp) setShowEndModal(true);
-      } catch (e) {
-        setState(getInitialState());
-        setShowHelpModal(true);
-      }
+    // Load User
+    const savedUser = localStorage.getItem(USER_KEY);
+    let loadedUser = null;
+    if (savedUser) {
+      try { loadedUser = JSON.parse(savedUser); setUser(loadedUser); } catch (e) { setUser(null); }
     } else {
-      setShowHelpModal(true);
+      setShowLoginModal(true);
     }
 
     // Load Stats
     const savedStats = localStorage.getItem(STATS_KEY);
     if (savedStats) {
-      try {
-        setStats(JSON.parse(savedStats));
-      } catch (e) {
-        setStats(getInitialStats());
-      }
+      try { setStats(JSON.parse(savedStats)); } catch (e) { setStats(getInitialStats()); }
     }
 
-    // Load User
-    const savedUser = localStorage.getItem(USER_KEY);
-    if (savedUser) {
+    // Load Game State
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Determine the correct word based on user status (Hard for User, Easy for Guest)
+    const isHardMode = !!loadedUser;
+    const correctTargetWord = getDailyWord(isHardMode);
+    
+    if (savedState) {
       try {
-        setUser(JSON.parse(savedUser));
+        const parsed: GameState = JSON.parse(savedState);
+        
+        // Reset if new day OR if the stored word doesn't match the required difficulty mode
+        // (This happens when a guest logs in, we must switch them to the Hard word)
+        if (parsed.lastPlayedDate !== today || parsed.targetWord !== correctTargetWord) {
+           setState({
+             ...getInitialState(),
+             targetWord: correctTargetWord,
+             lastPlayedDate: today
+           });
+        } else {
+           setState(parsed);
+           if (parsed.isWon || parsed.isLost) setShowEndModal(true);
+        }
       } catch (e) {
-        setUser(null);
+        setState({ ...getInitialState(), targetWord: correctTargetWord });
       }
+    } else {
+        setState({ ...getInitialState(), targetWord: correctTargetWord });
     }
   }, []);
 
-  // Save game state
+  // Watch for User Login/Logout to switch difficulty
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
+    if (!state.lastPlayedDate) return; // Skip initial render issues
+    
+    const isHardMode = !!user;
+    const correctWord = getDailyWord(isHardMode);
 
-  // Save stats
-  useEffect(() => {
-    localStorage.setItem(STATS_KEY, JSON.stringify(stats));
-  }, [stats]);
-
-  // Save User
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
-    } else {
-      localStorage.removeItem(USER_KEY);
+    if (state.targetWord !== correctWord) {
+        // Mode changed (e.g. Guest -> Login). Reset game to the correct word.
+        // NOTE: This enforces "Different words for Prize vs Fun".
+        const today = new Date().toISOString().split('T')[0];
+        setState({
+            guesses: [],
+            lastPlayedDate: today,
+            isWon: false,
+            isLost: false,
+            targetWord: correctWord,
+            walletCredited: false
+        });
+        setShowEndModal(false);
     }
+  }, [user, state.targetWord]); // Check when user or targetWord updates
+
+  // Syncs
+  useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }, [state]);
+  useEffect(() => { localStorage.setItem(STATS_KEY, JSON.stringify(stats)); }, [stats]);
+  useEffect(() => { 
+    if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+    else localStorage.removeItem(USER_KEY);
   }, [user]);
 
-  const updateStats = (isWin: boolean, guessCount: number) => {
+  const updateWalletAndStats = (isWin: boolean, guessCount: number) => {
+    if (state.walletCredited) return;
+
+    const isPrizeEligible = isWin && guessCount <= PRIZE_LIMIT;
+
     setStats(prev => {
       const newStats = { ...prev };
       newStats.gamesPlayed += 1;
-      
       if (isWin) {
         newStats.gamesWon += 1;
         newStats.currentStreak += 1;
         newStats.maxStreak = Math.max(newStats.currentStreak, newStats.maxStreak);
         newStats.totalGuesses += guessCount;
+        if (isPrizeEligible && user) newStats.totalEarnings += REWARD_AMOUNT;
       } else {
         newStats.currentStreak = 0;
       }
       return newStats;
     });
+
+    if (isPrizeEligible && user) {
+        setUser(prev => prev ? ({ ...prev, walletBalance: prev.walletBalance + REWARD_AMOUNT }) : null);
+    }
+
+    setState(prev => ({ ...prev, walletCredited: true }));
   };
 
   const handleGuess = async (word: string) => {
+    // 1. Check Guest Duplicate
     if (state.guesses.some(g => g.word === word)) {
       alert("این کلمه را قبلاً حدس زده‌اید!");
       return;
     }
 
+    // 2. Anti-Cheat: Immediate Win on First Guess
+    // "if anyone guess in first word he is absoult cheater."
+    if (state.guesses.length === 0 && word === state.targetWord) {
+        alert("⛔ سیستم ضد تقلب فعال شد!\n\nحدس زدن کلمه دقیقاً در اولین تلاش غیرممکن تلقی می‌شود.\nلطفاً از ربات یا لیست آماده استفاده نکنید.");
+        return;
+    }
+
     setLoading(true);
-    
-    // Calculate Rank via AI
     const result = await calculateRank(state.targetWord, word);
-    
     setLoading(false);
 
     if (!result.isWord) {
@@ -141,22 +178,14 @@ const App: React.FC = () => {
       return;
     }
 
-    // --- Unique Rank Logic ---
     let finalRank = result.rank;
+    if (finalRank === 1 && word !== state.targetWord) finalRank = 2; 
     
-    // Safety check: if AI returns 1 but words don't match, force it to at least 2
-    if (finalRank === 1 && word !== state.targetWord) {
-        finalRank = 2;
-    }
-
-    // Ensure uniqueness by checking against existing guesses
+    // Ensure uniqueness of ranks for visual clarity
     if (finalRank !== 1) {
         const existingRanks = new Set(state.guesses.map(g => g.rank));
-        while (existingRanks.has(finalRank)) {
-            finalRank++;
-        }
+        while (existingRanks.has(finalRank)) finalRank++;
     }
-    // -------------------------
 
     const newGuess: Guess = {
       word: word,
@@ -165,176 +194,122 @@ const App: React.FC = () => {
     };
 
     const isWin = finalRank === 1;
+    const newGuessList = [...state.guesses, newGuess];
 
     setState(prev => ({
       ...prev,
-      guesses: [...prev.guesses, newGuess],
+      guesses: newGuessList,
       isWon: isWin,
     }));
 
     if (isWin) {
-      updateStats(true, state.guesses.length + 1);
-      setTimeout(() => setShowEndModal(true), 800);
+        updateWalletAndStats(true, newGuessList.length);
+        setTimeout(() => setShowEndModal(true), 1500);
     }
   };
 
-  const handleHint = useCallback(async () => {
-    if (state.hintUsed) return;
-    setLoading(true);
-
-    // Dynamic Hint Logic
-    // Find the current best rank (lowest number)
-    const bestRank = state.guesses.length > 0 
-        ? Math.min(...state.guesses.map(g => g.rank)) 
-        : 10001;
-    
-    let targetRank = 100;
-    // If user is already close (rank <= 100), give them a better hint (current - 10)
-    if (bestRank <= 100) {
-        targetRank = Math.max(2, bestRank - 10);
-    }
-
-    // Generate word at target rank
-    const hintWord = await generateHint(state.targetWord, targetRank);
-    
-    // Calculate actual rank for the UI
-    const result = await calculateRank(state.targetWord, hintWord);
-    
-    // Ensure uniqueness if possible, otherwise just add it
-    let finalRank = result.rank;
-    if (finalRank !== 1) {
-        const existingRanks = new Set(state.guesses.map(g => g.rank));
-        while (existingRanks.has(finalRank)) {
-            finalRank++;
-        }
-    }
-
-    const newGuess: Guess = {
-        word: hintWord,
-        rank: finalRank,
-        timestamp: Date.now(),
-        isHint: true
-    };
-    
-    setState(prev => ({
-      ...prev,
-      guesses: [...prev.guesses, newGuess],
-      hintUsed: true,
-      hintWord: hintWord
-    }));
-
-    setLoading(false);
-  }, [state.hintUsed, state.targetWord, state.guesses]);
-
-  const handleGiveUpClick = () => {
-    setShowGiveUpConfirm(true);
+  const handleGiveUp = () => {
+      setState(prev => ({ ...prev, isLost: true }));
+      updateWalletAndStats(false, state.guesses.length);
+      setShowEndModal(true);
   };
 
-  const confirmGiveUp = () => {
-    setShowGiveUpConfirm(false);
-    updateStats(false, state.guesses.length);
-    setState(prev => ({
-        ...prev,
-        hasGivenUp: true
-    }));
-    setTimeout(() => setShowEndModal(true), 300);
+  const handleGetHint = async () => {
+    setHintLoading(true);
+    const hintWord = await generateHint(state.targetWord, 100);
+    setHintLoading(false);
+    if (hintWord) handleGuess(hintWord);
   };
 
-  const handleRestart = () => {
-    const newWord = getRandomWord();
-    setState({
-      guesses: [],
-      lastPlayedDate: new Date().toISOString().split('T')[0],
-      isWon: false,
-      hasGivenUp: false,
-      hintUsed: false,
-      hintWord: null,
-      targetWord: newWord,
-      mode: 'unlimited'
-    });
-    setShowEndModal(false);
-  };
+  const handleShare = async () => {
+    const word = state.targetWord;
+    const moves = state.guesses.length;
+    const url = window.location.href;
+    
+    const text = state.isWon 
+        ? `🧠 مغز متفکر! من کلمه «${word}» رو تو ${moves} حرکت پیدا کردم.\n\nتو میتونی رکورد منو بزنی؟ 👀\n\n🎮 بازی آنلاین «تو میتونی»:\n🔗 ${url}`
+        : `🤯 کلمه امروز «${word}» خیلی سخت بود!\n\nفکر میکنی بتونی پیداش کنی؟ 👀\n\n🎮 بازی آنلاین «تو میتونی»:\n🔗 ${url}`;
 
-  const handleShare = () => {
-    const statusText = state.isWon ? `پیدا کردم` : `تلاش کردم`;
-    const text = `من کلمه "${state.targetWord}" را در ${state.guesses.length} حدس در "تو میتونی" ${statusText}!\n#ToMeTony #Contexto`;
     if (navigator.share) {
-      navigator.share({
-        title: 'To Me Tony',
-        text: text,
-      }).catch(console.error);
+        try {
+            await navigator.share({
+                title: 'To Me Tony | تو میتونی',
+                text: text,
+            });
+        } catch (err) {
+            console.log('Share canceled');
+        }
     } else {
-      navigator.clipboard.writeText(text).then(() => {
-        alert("متن کپی شد!");
-      });
+        // Fallback for desktop/unsupported
+        navigator.clipboard.writeText(text).then(() => {
+            alert('متن اشتراک‌گذاری کپی شد! برای دوستانت بفرست.');
+        });
     }
   };
 
-  const handleLoginSuccess = (newUser: User) => {
-    setUser(newUser);
-  };
-  
-  const isGameOver = state.isWon || state.hasGivenUp;
+  const isGameOver = state.isWon || state.isLost;
+  const guessesUsed = state.guesses.length;
+  const prizeEligible = guessesUsed < PRIZE_LIMIT;
 
   return (
-    <div className="min-h-screen text-black font-sans pb-10 flex flex-col items-center relative overflow-x-hidden">
+    <div className="min-h-screen flex flex-col items-center pt-8 pb-32 relative">
+      <CalligraphyBackground />
       
-      <Header 
-        guessCount={state.guesses.length} 
-        user={user}
-        onOpenHelp={() => setShowHelpModal(true)}
-        onOpenStats={() => setShowStatsModal(true)}
-        onOpenLogin={() => setShowLoginModal(true)}
-      />
+      {/* Main Container */}
+      <div className="w-full max-w-md px-4 flex flex-col gap-6 z-20">
+            
+        <Header 
+            guessesLeft={Math.max(0, PRIZE_LIMIT - guessesUsed)}
+            user={user}
+            onOpenStats={() => setShowStatsModal(true)}
+            onOpenLogin={() => setShowLoginModal(true)}
+        />
 
-      {/* Floating Sticky Controller */}
-      <div className="sticky top-0 z-40 w-full backdrop-blur-xl bg-[#F0FDF4]/80 border-b border-[#00979E]/10 shadow-[0_4px_30px_rgba(0,151,158,0.05)] transition-all duration-300">
-        <div className="w-full max-w-md mx-auto px-4 py-4 flex flex-col gap-3">
-          
-          <GuessInput 
-            onGuess={handleGuess} 
-            loading={loading} 
-            disabled={isGameOver}
-            error={inputError}
-            setError={setInputError}
-          />
-
-          {!isGameOver && (
-            <div className="flex justify-between items-center px-1">
-              <button 
-                onClick={handleHint}
-                disabled={loading || state.hintUsed}
-                className="group flex items-center gap-1.5 text-xs font-bold text-[#00979E] hover:text-[#007A80] transition-colors disabled:opacity-50"
-              >
-                <div className="w-6 h-6 rounded-lg bg-[#E0F7FA] flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm">
-                  💡
+        <div className="flex flex-col gap-4">
+            {!isGameOver && (
+                <div className="flex justify-between items-center text-xs font-bold px-2">
+                    <span className="text-slate-400">کلمه امروز را پیدا کنید</span>
+                    {prizeEligible ? (
+                        <span className={`px-2 py-0.5 rounded-full ${PRIZE_LIMIT - guessesUsed <= 2 ? 'bg-rose-500/10 text-rose-400 animate-pulse' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                            {PRIZE_LIMIT - guessesUsed} فرصت تا جایزه
+                        </span>
+                    ) : (
+                        <span className="text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full">جایزه سوخت شد</span>
+                    )}
                 </div>
-                <span>راهنمایی</span>
-              </button>
+            )}
 
-              <button 
-                onClick={handleGiveUpClick}
-                disabled={loading || state.guesses.length === 0}
-                className="group flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-red-500 transition-colors disabled:opacity-0"
-              >
-                <span>تسلیم</span>
-                <div className="w-6 h-6 rounded-lg bg-slate-100 group-hover:bg-red-50 flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm">
-                  🏳️
+            <GuessInput 
+                onGuess={handleGuess} 
+                loading={loading} 
+                disabled={isGameOver}
+                error={inputError}
+                setError={setInputError}
+            />
+
+            {/* Post-Prize Actions */}
+            {!isGameOver && !prizeEligible && (
+                <div className="grid grid-cols-2 gap-3">
+                    <button onClick={handleGetHint} disabled={hintLoading}
+                        className="bg-slate-800/50 hover:bg-slate-800 text-amber-300 text-sm font-bold py-3 rounded-2xl border border-slate-700 transition-all flex justify-center items-center gap-2">
+                        {hintLoading ? '...' : '💡 راهنمایی'}
+                    </button>
+                    <button onClick={handleGiveUp}
+                        className="bg-slate-800/50 hover:bg-slate-800 text-rose-400 text-sm font-bold py-3 rounded-2xl border border-slate-700 transition-all">
+                        تسلیم 🏳️
+                    </button>
                 </div>
-              </button>
-            </div>
-          )}
+            )}
 
-          {isGameOver && (
-             <div className="flex justify-center animate-bounce">
+            {isGameOver && (
                 <button 
                     onClick={() => setShowEndModal(true)}
-                    className="text-xs font-bold text-white bg-[#00979E] px-5 py-2 rounded-xl shadow-lg hover:bg-[#007A80] transition-colors"
+                    className={`w-full text-lg font-bold text-white py-4 rounded-2xl shadow-lg transition-transform hover:scale-[1.02] flex items-center justify-center gap-2
+                    ${state.isWon ? 'bg-gradient-to-r from-emerald-500 to-teal-500 shadow-emerald-500/25' : 'bg-slate-700 shadow-slate-900/50'}`}
                 >
-                    نمایش نتیجه
+                    {state.isWon ? 'مشاهده نتیجه 🏆' : 'نمایش کلمه 🧐'}
                 </button>
-             </div>
-          )}
+            )}
         </div>
       </div>
 
@@ -342,104 +317,71 @@ const App: React.FC = () => {
 
       <Footer />
 
-      {/* Rules Modal */}
-      <Modal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} title="آموزش بازی">
-        <div className="space-y-4 font-light animate-slide-in">
-          <p className="font-bold text-[#00979E]">به "تو میتونی" خوش آمدید!</p>
-          <p className="text-sm text-slate-600 leading-6">هدف بازی ساده است: <strong className="font-bold text-slate-800">کلمه مخفی را با توجه به ارتباط معنایی پیدا کنید.</strong></p>
-          <ul className="list-disc list-inside space-y-2 marker:text-[#00979E] text-sm text-slate-600 leading-6">
-            <li>هر حدس توسط هوش مصنوعی رتبه‌بندی می‌شود.</li>
-            <li>رتبه <span className="font-bold font-mono text-[#00979E]">۱</span> یعنی خود کلمه!</li>
-            <li>کلمات مرتبط (مثل "درخت" و "سیب") رتبه سبز دارند.</li>
-            <li>کلمات بی ربط رتبه زرد یا قرمز می‌گیرند.</li>
-          </ul>
-        </div>
+      {/* Modals */}
+      <Modal isOpen={showStatsModal} onClose={() => setShowStatsModal(false)} title="پروفایل کاربری">
+        <StatsView stats={stats} user={user} />
       </Modal>
 
-      {/* Stats Modal */}
-      <Modal isOpen={showStatsModal} onClose={() => setShowStatsModal(false)} title="آمار شما">
-        <StatsView stats={stats} />
-        {!user?.isLoggedIn && (
-           <div className="mt-6 border-t pt-4 text-center">
-              <button 
-                onClick={() => { setShowStatsModal(false); setShowLoginModal(true); }}
-                className="text-xs text-[#00979E] underline font-bold"
-              >
-                برای ذخیره آمار وارد شوید
-              </button>
-           </div>
-        )}
-      </Modal>
-
-      {/* Login Modal */}
       <LoginModal 
         isOpen={showLoginModal} 
         onClose={() => setShowLoginModal(false)} 
-        onLoginSuccess={handleLoginSuccess}
+        onLoginSuccess={(u) => { setUser(u); setShowLoginModal(false); }}
       />
 
-      {/* Give Up Confirmation Modal */}
-      <Modal isOpen={showGiveUpConfirm} onClose={() => setShowGiveUpConfirm(false)} title="تسلیم؟">
-        <div className="space-y-6 pt-2">
-           <p className="text-slate-600 leading-relaxed text-sm">
-             آیا می‌خواهید بازی را تمام کنید و کلمه مخفی را ببینید؟
-             <br/>
-             <span className="text-xs text-red-400">این کار باعث قطع شدن "برد متوالی" شما می‌شود.</span>
-           </p>
-           <div className="flex gap-3">
-              <button 
-                onClick={confirmGiveUp}
-                className="flex-1 bg-red-500 text-white py-3 rounded-xl font-bold hover:bg-red-600 active:scale-95 transition-all shadow-lg shadow-red-200"
-              >
-                بله، نشان بده
-              </button>
-              <button 
-                onClick={() => setShowGiveUpConfirm(false)}
-                className="flex-1 bg-white text-slate-700 border border-slate-200 py-3 rounded-xl font-bold hover:bg-slate-50 active:scale-95 transition-all"
-              >
-                ادامه می‌دهم
-              </button>
-           </div>
-        </div>
-      </Modal>
-
-      {/* End Game Modal */}
       <Modal isOpen={showEndModal} onClose={() => setShowEndModal(false)}>
-        <div className="text-center pt-2">
-          <div className={`inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4 text-4xl shadow-lg ring-4 ring-white ${state.isWon ? 'bg-gradient-to-tr from-emerald-100 to-teal-200 text-emerald-600' : 'bg-gradient-to-tr from-red-50 to-orange-100 text-red-500'}`}>
-            {state.isWon ? '🏆' : '🫠'}
-          </div>
-          <h2 className="text-3xl font-['Lalezar'] text-slate-800 mb-2">
-            {state.isWon ? 'آفرین!' : 'بازی تمام شد'}
-          </h2>
-          
-          <div className="bg-white rounded-2xl p-6 mb-8 shadow-xl shadow-slate-200/50 border border-slate-100 relative overflow-hidden group mt-6">
-             <div className="text-[10px] font-bold uppercase text-slate-400 mb-1 tracking-widest">کلمه مخفی</div>
-             <div className="text-4xl font-['Lalezar'] text-[#00979E] mb-4 drop-shadow-sm">{state.targetWord}</div>
-             
-             <div className="w-full h-px bg-slate-100 my-4"></div>
-             
-             <div className="flex justify-between items-center px-2">
-               <span className="text-slate-400 text-xs font-bold">تعداد تلاش</span>
-               <span className="text-xl font-black text-slate-800 font-sans">{state.guesses.length}</span>
-             </div>
-          </div>
-
-          <div className="space-y-3">
-            <button 
-              onClick={handleRestart}
-              className="w-full bg-[#00979E] text-white py-4 rounded-xl font-bold text-lg hover:bg-[#007A80] active:scale-[0.98] transition-all shadow-xl shadow-[#00979E]/20 flex items-center justify-center gap-2"
-            >
-              <span>بازی بعدی</span> ↻
-            </button>
+        <div className="text-center pt-2 pb-4">
+            <div className={`text-7xl mb-6 mx-auto w-24 h-24 flex items-center justify-center rounded-full ${state.isWon ? 'bg-emerald-500/10 text-emerald-400 shadow-[0_0_30px_rgba(16,185,129,0.2)]' : 'bg-rose-500/10 text-rose-500'}`}>
+                {state.isWon ? '💎' : '👻'}
+            </div>
             
-             <button 
-              onClick={handleShare}
-              className="w-full bg-white text-[#00979E] border-2 border-[#E0F7FA] py-4 rounded-xl font-bold text-lg hover:bg-[#E0F7FA] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            <h2 className="text-3xl font-['Lalezar'] text-white mb-2">
+                {state.isWon ? 'پیروزی!' : 'پایان بازی'}
+            </h2>
+            
+            <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 my-6 relative overflow-hidden group">
+                 <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-transparent"></div>
+                 <div className="relative">
+                    <div className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">کلمه مخفی امروز</div>
+                    <div className="text-4xl font-['Lalezar'] text-white drop-shadow-md">{state.targetWord}</div>
+                 </div>
+            </div>
+
+            {/* Share Button */}
+            <button 
+                onClick={handleShare}
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-indigo-500/25 mb-4 flex items-center justify-center gap-2"
             >
-              <span>اشتراک‌گذاری</span> 📤
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" />
+                </svg>
+                اشتراک‌گذاری با دوستان
             </button>
-          </div>
+
+            {/* Prize Message */}
+            {state.isWon && state.guesses.length <= PRIZE_LIMIT && user && (
+                 <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-emerald-400 font-bold mb-4">
+                     + {REWARD_AMOUNT.toLocaleString('fa-IR')} تومان پاداش دریافت شد
+                 </div>
+            )}
+
+            {/* Guest/Missed Prize Message */}
+            {state.isWon && (!user || state.guesses.length > PRIZE_LIMIT) && (
+                 <div className="text-amber-400/80 font-medium text-sm mb-4 px-4 leading-relaxed">
+                     {user 
+                        ? 'جایزه سوخت شده بود، اما آفرین بابت پشتکارت!'
+                        : 'برای دریافت جایزه نقدی در دفعات بعد، وارد حساب شوید.'}
+                 </div>
+            )}
+            
+            {/* Lockout Message for Prize Players */}
+            {user && (
+                 <div className="mt-6 bg-slate-800 border border-slate-700 rounded-lg p-3 text-xs text-slate-400">
+                    🔒 شما بازی امروز را تکمیل کرده‌اید. فرصت بعدی: فردا
+                 </div>
+            )}
+             {!user && (
+                 <p className="text-slate-500 text-xs mt-6">فردا با کلمه‌ای جدید منتظرتان هستیم.</p>
+             )}
         </div>
       </Modal>
     </div>

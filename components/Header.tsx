@@ -1,67 +1,51 @@
+
 import React from 'react';
-import { GAME_TITLE, GAME_SUBTITLE } from '../constants';
+import { GAME_TITLE } from '../constants';
 import { User } from '../types';
 
 interface HeaderProps {
-  guessCount: number;
+  guessesLeft: number;
   user: User | null;
-  onOpenHelp: () => void;
   onOpenStats: () => void;
   onOpenLogin: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ guessCount, user, onOpenHelp, onOpenStats, onOpenLogin }) => {
+export const Header: React.FC<HeaderProps> = ({ user, onOpenStats, onOpenLogin }) => {
   return (
-    <header className="w-full max-w-md mx-auto pt-6 pb-2 px-4 flex flex-col items-center gap-1 relative mb-2">
-      <h1 className="text-5xl font-['Lalezar'] text-[#00979E] tracking-wide drop-shadow-sm flex flex-col items-center z-10">
-        {GAME_TITLE}
-        <span className="text-sm font-sans font-normal text-[#00979E]/40 tracking-[0.2em] uppercase mt-[-5px]">{GAME_SUBTITLE}</span>
-      </h1>
+    <div className="w-full flex justify-between items-center py-2">
       
-      {/* Decorative Persian Border */}
-      <div className="w-32 h-1 border-b-2 border-[#00979E]/20 border-double my-2"></div>
+      {/* Modern Logo */}
+      <div className="flex flex-col">
+        <h1 className="text-4xl font-['Lalezar'] text-transparent bg-clip-text bg-gradient-to-br from-violet-400 to-indigo-300 drop-shadow-sm">
+          {GAME_TITLE}
+        </h1>
+      </div>
       
-      <div className="flex items-center gap-2 mt-1">
-        <span className="text-xs font-bold text-[#00979E]/60 bg-[#E0F7FA] px-3 py-1.5 rounded-lg min-w-[60px] text-center border border-[#00979E]/10">
-          {guessCount} حدس
-        </span>
-        
-        <button 
-          onClick={onOpenStats}
-          className="text-xs font-bold text-[#00979E]/60 hover:text-[#00979E] hover:bg-[#E0F7FA] w-8 h-8 flex items-center justify-center rounded-lg transition-colors border border-transparent hover:border-[#00979E]/10"
-          title="آمار بازی"
-        >
-          📊
-        </button>
-
-        <button 
-          onClick={onOpenHelp}
-          className="text-xs font-bold text-[#00979E]/60 hover:text-[#00979E] hover:bg-[#E0F7FA] px-3 py-1.5 rounded-lg transition-colors border border-transparent hover:border-[#00979E]/10"
-          title="راهنما"
-        >
-          ؟
-        </button>
-
-        <button 
-          onClick={onOpenLogin}
-          className={`
-            text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 border
-            ${user?.isLoggedIn 
-              ? 'text-[#007A80] bg-white border-[#00979E]/20 hover:bg-[#E0F7FA]' 
-              : 'text-slate-400 bg-white border-slate-100 hover:bg-slate-50 hover:text-slate-600'
-            }
-          `}
-        >
+      {/* User Glass Pill */}
+      <button 
+         onClick={user?.isLoggedIn ? onOpenStats : onOpenLogin}
+         className={`
+           flex items-center gap-2 pl-3 pr-1 py-1.5 rounded-full text-xs font-bold transition-all border
+           ${user?.isLoggedIn 
+             ? 'bg-slate-800/60 text-slate-200 border-slate-700 hover:bg-slate-700/80 hover:border-slate-600' 
+             : 'bg-violet-600 text-white border-violet-500 hover:bg-violet-500'
+           }
+         `}
+      >
           {user?.isLoggedIn ? (
             <>
-              <span className="w-2 h-2 rounded-full bg-[#00979E]"></span>
-              {user.name}
+              <div className="text-right">
+                <span className="block text-[10px] text-slate-400 leading-tight">موجودی</span>
+                <span className="text-emerald-400 font-mono">{user.walletBalance.toLocaleString('fa-IR')}</span>
+              </div>
+              <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 border border-slate-600">
+                {user.name.charAt(0)}
+              </div>
             </>
           ) : (
-            'ورود'
+            <span className="px-2">ورود / ثبت نام</span>
           )}
-        </button>
-      </div>
-    </header>
+      </button>
+    </div>
   );
 };

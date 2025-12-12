@@ -2,42 +2,42 @@
 import React from 'react';
 
 export const Footer: React.FC = () => {
-  // Simulate stats for display purposes
-  // In a real app, these would come from an API
-  const onlinePlayers = 142;
-  const todayPlayers = 3891;
+  // Stats simulation
+  const onlineUsers = 1253;
+  const winnersToday = 1042;
   
-  const today = new Date().toLocaleDateString('fa-IR', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
-
   return (
-    <footer className="w-full max-w-md mx-auto mt-auto px-6 pb-6 pt-2">
+    <footer className="w-full max-w-md mx-auto mt-auto px-6 pb-8 pt-4 z-10">
       <div className="flex flex-col gap-4 text-center">
         
-        {/* Divider */}
-        <div className="w-full h-px bg-gradient-to-r from-transparent via-[#00979E]/20 to-transparent"></div>
-
-        <div className="flex justify-between items-center text-xs text-slate-500 font-bold px-2">
-            <div className="flex items-center gap-2 group cursor-default">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                </span>
-                <span className="group-hover:text-[#00979E] transition-colors">{onlinePlayers.toLocaleString('fa-IR')} آنلاین</span>
-            </div>
+        {/* Stat Bar */}
+        <div className="bg-slate-900/60 backdrop-blur-md text-slate-300 p-3 rounded-2xl border border-white/5 flex items-center justify-between px-6 shadow-xl shadow-black/20">
             
-            <div className="flex items-center gap-1.5 group cursor-default">
-                <span className="grayscale group-hover:grayscale-0 transition-all">👥</span>
-                <span className="group-hover:text-[#00979E] transition-colors">{todayPlayers.toLocaleString('fa-IR')} بازی امروز</span>
+            <div className="flex flex-col items-center">
+                 <div className="flex items-center gap-2 mb-0.5">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500 box-shadow-glow"></span>
+                    </span>
+                    <span className="text-lg font-black font-sans text-slate-100">{onlineUsers.toLocaleString('fa-IR')}</span>
+                 </div>
+                 <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">آنلاین</span>
             </div>
-        </div>
 
-        <div className="text-[11px] text-[#00979E]/80 font-medium bg-white/50 border border-[#00979E]/10 py-2 rounded-xl shadow-sm backdrop-blur-sm">
-            📅 {today}
+            <div className="h-8 w-px bg-slate-700/50"></div>
+
+            <div className="flex flex-col items-center">
+                 <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-base grayscale opacity-70">🏆</span>
+                    <span className="text-lg font-black font-sans text-slate-100">{winnersToday.toLocaleString('fa-IR')}</span>
+                 </div>
+                 <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">برندگان امروز</span>
+            </div>
+
+        </div>
+        
+        <div className="text-[10px] text-slate-600 font-medium">
+            نسخه ۳.۰ • طراحی شده با ❤️ برای فارسی زبانان
         </div>
       </div>
     </footer>

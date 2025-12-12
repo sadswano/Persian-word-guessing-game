@@ -1,34 +1,42 @@
 
 export const GAME_TITLE = "تو میتونی";
-export const GAME_SUBTITLE = "To Me Tony";
+export const GAME_SUBTITLE = ""; 
 
-// A curated list of Persian words for the daily puzzle. 
-// In a real app, this might be longer or fetched from a server.
-export const SECRET_WORDS = [
-  "زندگی", "عشق", "آزادی", "خورشید", "دریا", "کتاب", "دوست", "امید", "زمان", "خاطره",
-  "باران", "آسمان", "زمین", "فکر", "شادی", "غم", "انسان", "رویا", "سفر", "خانه",
-  "موسیقی", "هنر", "شعر", "دانش", "کار", "تلاش", "موفقیت", "آرامش", "جنگل", "کوه",
-  "پرنده", "آب", "آتش", "خاک", "باد", "ستاره", "شب", "روز", "بهار", "زمستان",
-  "پاییز", "تابستان", "گل", "درخت", "سیب", "نان", "چای", "قهوه", "صندلی", "میز",
-  "پنجره", "دیوار", "کوچه", "شهر", "روستا", "ماه", "ابر", "برف", "سایه", "نور",
-  "صدا", "سکوت", "لبخند", "اشک", "نگاه", "دست", "پا", "قلب", "ذهن", "روح"
+export const PRIZE_LIMIT = 7; 
+export const MAX_GUESSES = 999; 
+export const REWARD_AMOUNT = 7000;
+export const MIN_WITHDRAWAL = 50000;
+
+// Fun Mode: Common, daily words (High school level)
+export const EASY_WORDS = [
+  "آسمان", "پنجره", "خیابان", "مدرسه", "فوتبال", "خورشید", "لبخند", "دوست", 
+  "خانواده", "دریا", "جنگل", "کتاب", "باران", "پرنده", "ساعت", "آینه", 
+  "باغچه", "مداد", "کیف", "صندلی", "ماکرونی", "بستنی", "گوشی", "تلویزیون"
+];
+
+// Prize Mode: Hardcore, Abstract, Homophones (Trap words)
+export const HARD_WORDS = [
+  "قسطاس", "برزخ", "تغافل", "استحاله", "تذبذب", "مصلحت", "طینت", "عزت", 
+  "ذلت", "فراست", "صلابت", "مناعت", "قناعت", "شقاوت", "ضلالت", "صیانت", 
+  "بضاعت", "فصاحت", "بلاغت", "وقاحت", "مستاصل", "مضمحل", "منزجر", "متقاعد"
 ];
 
 // Seeded random function to pick a word based on the date
-export const getDailyWord = (): string => {
+export const getDailyWord = (isHardMode: boolean = true): string => {
   const today = new Date().toISOString().split('T')[0];
   let hash = 0;
   for (let i = 0; i < today.length; i++) {
     hash = ((hash << 5) - hash) + today.charCodeAt(i);
     hash |= 0; // Convert to 32bit integer
   }
-  const index = Math.abs(hash) % SECRET_WORDS.length;
-  return SECRET_WORDS[index];
+  
+  const list = isHardMode ? HARD_WORDS : EASY_WORDS;
+  const index = Math.abs(hash) % list.length;
+  return list[index];
 };
 
 export const getRandomWord = (): string => {
-  const index = Math.floor(Math.random() * SECRET_WORDS.length);
-  return SECRET_WORDS[index];
+  return getDailyWord(true);
 };
 
 export const getGameNumber = (): number => {
