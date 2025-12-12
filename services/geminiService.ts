@@ -1,8 +1,6 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { WordSimilarityResponse } from "../types";
-
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const MODEL_NAME = "gemini-2.5-flash";
 
@@ -14,6 +12,9 @@ export const calculateRank = async (secretWord: string, guessedWord: string): Pr
   if (secretWord === guessedWord) {
     return { rank: 1, isWord: true };
   }
+
+  // Initialize client inside the function to ensure process.env.API_KEY is available
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const prompt = `
     I am building a game called Contexto. The secret Persian word is "${secretWord}".
@@ -67,6 +68,9 @@ export const calculateRank = async (secretWord: string, guessedWord: string): Pr
  * Generates a single hint word that is semantically close to the secret word.
  */
 export const generateHint = async (secretWord: string, targetRank: number): Promise<string> => {
+  // Initialize client inside the function to ensure process.env.API_KEY is available
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
   const prompt = `
     The secret Persian word is "${secretWord}".
     Provide a single Persian word that is contextually related to this word, with an estimated rank of approximately ${targetRank}.
